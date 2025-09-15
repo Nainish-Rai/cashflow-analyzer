@@ -1,6 +1,8 @@
-import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react"
-
-import { Badge } from "@/components/ui/badge"
+import React from "react";
+import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
+import { useMetrics } from "@/lib/contexts/metrics-context";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Card,
   CardAction,
@@ -8,95 +10,163 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "@/components/ui/card";
 
 export function SectionCards() {
+  const { metrics, isLoading } = useMetrics();
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+  };
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat("en-US").format(num);
+  };
+
+  const getChangeIcon = (isPositive: boolean) => {
+    return isPositive ? IconTrendingUp : IconTrendingDown;
+  };
+
+  const getChangeColor = (isPositive: boolean) => {
+    return isPositive ? "text-green-600" : "text-red-600";
+  };
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 px-4 lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <Card key={i} className="@container/card">
+            <CardHeader>
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-8 w-24" />
+            </CardHeader>
+            <CardFooter>
+              <Skeleton className="h-4 w-32" />
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  const netCashflowIsPositive = metrics.netCashflow >= 0;
+  const revenueGrowth = 12.5; // This could be calculated from historical data
+  const expenseGrowth = -8.2; // Negative growth in expenses is good
+
   return (
     <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
       <Card className="@container/card">
         <CardHeader>
           <CardDescription>Total Revenue</CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            $1,250.00
+            {formatCurrency(metrics.totalRevenue)}
           </CardTitle>
           <CardAction>
-            <Badge variant="outline">
-              <IconTrendingUp />
-              +12.5%
+            <Badge variant="outline" className="text-green-600">
+              <IconTrendingUp className="size-3" />+{revenueGrowth}%
             </Badge>
           </CardAction>
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="line-clamp-1 flex gap-2 font-medium">
-            Trending up this month <IconTrendingUp className="size-4" />
+            Trending up this month{" "}
+            <IconTrendingUp className="size-4 text-green-600" />
           </div>
           <div className="text-muted-foreground">
-            Visitors for the last 6 months
+            {metrics.lastUpdated
+              ? `Updated ${new Date(metrics.lastUpdated).toLocaleTimeString()}`
+              : "Revenue from all sources"}
           </div>
         </CardFooter>
       </Card>
+
       <Card className="@container/card">
         <CardHeader>
-          <CardDescription>New Customers</CardDescription>
+          <CardDescription>Total Expenses</CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            1,234
+            {formatCurrency(metrics.totalExpenses)}
           </CardTitle>
           <CardAction>
-            <Badge variant="outline">
-              <IconTrendingDown />
-              -20%
+            <Badge variant="outline" className="text-green-600">
+              <IconTrendingDown className="size-3" />
+              {expenseGrowth}%
             </Badge>
           </CardAction>
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="line-clamp-1 flex gap-2 font-medium">
-            Down 20% this period <IconTrendingDown className="size-4" />
+            Expenses optimized{" "}
+            <IconTrendingDown className="size-4 text-green-600" />
           </div>
           <div className="text-muted-foreground">
-            Acquisition needs attention
+            Operating costs under control
           </div>
         </CardFooter>
       </Card>
+
+      <Card className="@container/card">
+        <CardHeader>
+          <CardDescription>Net Cashflow</CardDescription>
+          <CardTitle
+            className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${getChangeColor(
+              netCashflowIsPositive
+            )}`}
+          >
+            {formatCurrency(metrics.netCashflow)}
+          </CardTitle>
+          <CardAction>
+            <Badge
+              variant="outline"
+              className={
+                netCashflowIsPositive ? "text-green-600" : "text-red-600"
+              }
+            >
+              {React.createElement(getChangeIcon(netCashflowIsPositive), {
+                className: "size-3",
+              })}
+              {netCashflowIsPositive ? "+" : ""}
+              {((metrics.netCashflow / metrics.totalRevenue) * 100).toFixed(1)}%
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardFooter className="flex-col items-start gap-1.5 text-sm">
+          <div className="line-clamp-1 flex gap-2 font-medium">
+            {netCashflowIsPositive ? "Positive cashflow" : "Needs attention"}
+            {React.createElement(getChangeIcon(netCashflowIsPositive), {
+              className: `size-4 ${getChangeColor(netCashflowIsPositive)}`,
+            })}
+          </div>
+          <div className="text-muted-foreground">Revenue minus expenses</div>
+        </CardFooter>
+      </Card>
+
       <Card className="@container/card">
         <CardHeader>
           <CardDescription>Active Accounts</CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            45,678
+            {formatNumber(metrics.activeAccounts)}
           </CardTitle>
           <CardAction>
-            <Badge variant="outline">
-              <IconTrendingUp />
-              +12.5%
+            <Badge variant="outline" className="text-green-600">
+              <IconTrendingUp className="size-3" />+{metrics.growthRate}%
             </Badge>
           </CardAction>
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">
           <div className="line-clamp-1 flex gap-2 font-medium">
-            Strong user retention <IconTrendingUp className="size-4" />
+            Strong user retention{" "}
+            <IconTrendingUp className="size-4 text-green-600" />
           </div>
-          <div className="text-muted-foreground">Engagement exceed targets</div>
-        </CardFooter>
-      </Card>
-      <Card className="@container/card">
-        <CardHeader>
-          <CardDescription>Growth Rate</CardDescription>
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            4.5%
-          </CardTitle>
-          <CardAction>
-            <Badge variant="outline">
-              <IconTrendingUp />
-              +4.5%
-            </Badge>
-          </CardAction>
-        </CardHeader>
-        <CardFooter className="flex-col items-start gap-1.5 text-sm">
-          <div className="line-clamp-1 flex gap-2 font-medium">
-            Steady performance increase <IconTrendingUp className="size-4" />
+          <div className="text-muted-foreground">
+            {metrics.anomaliesFound
+              ? `${metrics.anomaliesFound} anomalies detected`
+              : "Engagement meets targets"}
           </div>
-          <div className="text-muted-foreground">Meets growth projections</div>
         </CardFooter>
       </Card>
     </div>
-  )
+  );
 }

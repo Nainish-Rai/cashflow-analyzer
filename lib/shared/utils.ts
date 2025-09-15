@@ -41,6 +41,17 @@ export const getDateRange = (
   // Use predefined periods
   const now = new Date();
   const calculatedStartDate = new Date();
+  let calculatedEndDate = new Date(now);
+
+  // Check if period is a specific year (e.g., "2024", "2023")
+  if (period && /^\d{4}$/.test(period)) {
+    const year = parseInt(period);
+    calculatedStartDate.setFullYear(year, 0, 1);
+    calculatedStartDate.setHours(0, 0, 0, 0);
+    calculatedEndDate.setFullYear(year, 11, 31);
+    calculatedEndDate.setHours(23, 59, 59, 999);
+    return { startDate: calculatedStartDate, endDate: calculatedEndDate };
+  }
 
   switch (period) {
     case "last_30_days":
@@ -58,10 +69,16 @@ export const getDateRange = (
     case "current_month":
       calculatedStartDate.setDate(1);
       calculatedStartDate.setHours(0, 0, 0, 0);
+      // Set end date to end of current month
+      calculatedEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      calculatedEndDate.setHours(23, 59, 59, 999);
       break;
     case "current_year":
       calculatedStartDate.setMonth(0, 1);
       calculatedStartDate.setHours(0, 0, 0, 0);
+      // Set end date to end of current year
+      calculatedEndDate = new Date(now.getFullYear(), 11, 31);
+      calculatedEndDate.setHours(23, 59, 59, 999);
       break;
     case "yesterday":
       calculatedStartDate.setDate(now.getDate() - 1);
@@ -85,5 +102,5 @@ export const getDateRange = (
       calculatedStartDate.setDate(now.getDate() - 30); // Default to 30 days
   }
 
-  return { startDate: calculatedStartDate, endDate: now };
+  return { startDate: calculatedStartDate, endDate: calculatedEndDate };
 };
