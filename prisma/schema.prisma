@@ -1,0 +1,47 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model RevenueTransaction {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(10, 2) // DECIMAL for currency with precision
+  date        DateTime @db.Timestamptz(6) // TIMESTAMP WITH TIME ZONE
+  planId      String   @db.VarChar(255)   // VARCHAR for pricing plan ID
+  category    String?  @db.VarChar(255)   // Optional category
+  description String?  @db.VarChar(1000)  // Optional description
+  customerId  String?  @db.VarChar(255)   // Optional customer identifier
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("revenue_transactions")
+  @@index([date])
+  @@index([planId])
+}
+
+model ExpenseTransaction {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(10, 2) // DECIMAL for currency with precision
+  date        DateTime @db.Timestamptz(6) // TIMESTAMP WITH TIME ZONE
+  category    String   @db.VarChar(255)   // VARCHAR for expense category
+  description String?  @db.VarChar(1000)  // Optional description
+  vendor      String?  @db.VarChar(255)   // Optional vendor name
+  isRecurring Boolean  @default(false)    // Flag for recurring expenses
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("expense_transactions")
+  @@index([date])
+  @@index([category])
+}
