@@ -2,47 +2,51 @@ i need to build a cashflow analyzer of a business based on their revenue data fr
 
 my tech stack is nextjs, typescript, vercel ai sdk
 
-### Phase 1: The Data Pipeline & Foundation
+### Phase 1: The Data Foundation (Unchanged)
 
-- **Primary Goal:** To reliably ingest and structure all necessary financial data. If this phase fails, the entire project is built on sand.
+- **Primary Goal:** To ingest and structure all necessary financial data. This phase is the bedrock; the agent is useless without clean, reliable data.
 - **Key Activities:**
-  1.  **Project Scaffolding:** Initialize the Next.js/TypeScript project. Set up linting, formatting, and a basic project structure.
-  2.  **Database Schema Design:** In Vercel Postgres, define two core tables: `revenue_transactions` and `expense_transactions`. Be meticulous with data types: use `DECIMAL` for currency, `TIMESTAMP WITH TIME ZONE` for dates, and `VARCHAR` for categories and plan IDs.
-  3.  **Build the Ingestion API:** Create a Next.js API route (`/api/upload`) that handles `multipart/form-data` requests. It will accept CSV files.
-  4.  **Develop the Parsing & Validation Logic:** Use a library like `papaparse` to stream and parse CSVs. This is the critical step: implement ruthless validation. Reject any file that doesn't match the exact expected columns. Validate data types row-by-row. Any row with a non-numeric amount or an invalid date gets logged and discarded.
-- **Definition of Done:** I can successfully upload a revenue CSV and an expense CSV via the API. The data is parsed, validated, and stored correctly in the corresponding database tables. An attempt to upload a malformed CSV is rejected with a clear `400 Bad Request` error.
+  1.  **Project Scaffolding:** Initialize Next.js, TypeScript, Vercel Postgres.
+  2.  **Schema Design:** Define the `revenue_transactions` and `expense_transactions` tables. The schema must be designed to efficiently support the queries our agent's tools will make (e.g., indexing on `plan_id`, `category`, and `timestamp`).
+  3.  **Ingestion API:** Build the `/api/upload` route for CSV parsing and validation.
+  4.  **Validation Logic:** Implement strict data validation. The agent must trust its data source.
+- **Definition of Done:** I can upload revenue and expense CSVs. The data is correctly stored in the database. Malformed data is rejected. This phase remains the same because every great analyst needs good data.
 
 ---
 
-### Phase 2: The Visualization & Attribution Engine
+### Phase 2: Building the Agent's Toolkit
 
-- **Primary Goal:** To transform the raw, stored data into a coherent financial picture that a human can understand.
+- **Primary Goal:** To implement the deterministic, reliable functions (tools) that the agent will use to perceive and analyze the financial world. This is where we encapsulate all our business logic.
 - **Key Activities:**
-  1.  **Build Aggregation Endpoints:** Create API routes that query the database to provide aggregated data. For example: `/api/metrics/cashflow` which returns monthly total revenue and expenses, or `/api/metrics/revenue-by-plan`. These endpoints will do the heavy lifting with SQL `GROUP BY` and `SUM` functions.
-  2.  **Develop the Dashboard UI:** Create the main dashboard page using Next.js. Use a charting library like Recharts or Chart.js to create the three core visualizations (Cashflow, Revenue by Plan, Spends by Category). Fetch data from the aggregation endpoints.
-  3.  **Implement the MVP Attribution Model:** Write the core logic that assigns company-wide spending to each pricing plan. Start with the simple proportional model: `Plan A's Allocated Cost = Total Spends * (Plan A Revenue / Total Revenue)`. This calculation will power the "Profitability per Plan" metric.
-- **Definition of Done:** The main dashboard loads and displays accurate charts based on the data ingested in Phase 1. A clear "Profitability" number (even if based on the simple model) is calculated and displayed for each pricing plan.
+  1.  **Implement Data Retrieval Tools:** Code the actual logic for `listPricingPlansTool`, `getRevenueSummaryTool`, and `getExpenseSummaryTool`. These functions will query the database and return aggregated, structured data.
+  2.  **Implement Core Calculation Tools:** This is the most critical part. Implement the logic for `calculateProfitabilityForPlanTool`, `calculateCashflowTrendTool`, and `findDataAnomaliesTool`. These are not just API endpoints; they are standalone, testable functions.
+  3.  **Unit Testing:** Write unit tests for each tool. A tool like `calculateProfitabilityForPlanTool` must be 100% accurate. Test it with mock data to ensure its calculations are correct before letting the agent touch it.
+  4.  **(Optional) Build the Dashboard:** The dashboard is now a _consumer_ of your tools. The UI charts can fetch their data from the same underlying functions the agent will use. This ensures consistency between what the user sees and what the agent analyzes.
+- **Definition of Done:** All six tools (`list_pricing_plans`, `get_revenue_summary`, etc.) are implemented, unit-tested, and exported from `tools/financials.ts`. They can be called manually and return predictable, correct data.
 
 ---
 
-### Phase 3: The AI Recommendation Core
+### Phase 3: Agent Assembly & Orchestration
 
-- **Primary Goal:** To integrate the LLM as a programmatic analyst that provides concrete, data-driven recommendations.
+- **Primary Goal:** To bring the "mind" of the agent to life by combining the system prompt, the LLM, and the toolkit.
 - **Key Activities:**
-  1.  **Create the Analysis API Endpoint:** Build a new API route, `/api/analyze`. This endpoint will execute the logic from Phase 2 to generate a complete financial summary.
-  2.  **Engineer the Master Prompt:** This is the most important task of the phase. Craft a detailed system prompt that instructs the LLM to act as an experienced CFO. The prompt will define the structure of the JSON data it's about to receive and, crucially, the exact JSON schema of the response you expect back (e.g., an array of objects with `recommendation`, `reasoning`, and `impact` fields).
-  3.  **Integrate the Vercel AI SDK:** Use the SDK, specifically the `generateObject` function, to call your chosen LLM (like GPT-4o or Claude 3 Opus). Pass the financial summary as context and your desired Zod schema for the response. This enforces a structured, predictable output.
-  4.  **Render the Recommendations:** On the frontend, add a button that calls the `/api/analyze` endpoint. When the structured JSON response is received, render it in a clean, easy-to-read format.
-- **Definition of Done:** A user can click a button on the dashboard, which triggers the AI analysis. Within a few seconds, at least two specific, actionable recommendations appear on the screen, directly related to the data provided.
+  1.  **Finalize the System Prompt:** Refine and lock in the `CASHFLOW_AGENT_SYSTEM_PROMPT`. This involves tuning the agent's persona, rules, and suggested workflow.
+  2.  **Implement the Agent Host:** Create the main `cashflowAgent` function. This is where you'll use the Vercel AI SDK's `generateText` function, passing it the system prompt, the user's initial query, and the entire suite of tools you built in Phase 2.
+  3.  **Develop the Frontend Interface:** The UI is no longer just a button that shows a final result. It needs to:
+      - Take an initial text prompt from the user (e.g., "Give me a full cashflow analysis").
+      - Call the `cashflowAgent` endpoint.
+      - Display the agent's progress. This is key. Use the `onStepFinish` callback to show the user the agent's chain of thought: "Thinking...", "Using tool `get_revenue_summary`...", "Found 450 transactions...", etc.
+      - Render the final, formatted recommendation.
+- **Definition of Done:** A user can type a prompt, kick off the agent, see the agent's step-by-step progress (tool calls and reasoning), and receive a final analytical response in the UI.
 
 ---
 
-### Phase 4: Hardening & MVP Launch
+### Phase 4: Hardening, UX Refinement & Launch
 
-- **Primary Goal:** To turn the functional prototype into a stable, usable tool and get it into the world.
+- **Primary Goal:** To make the agent interaction feel seamless, robust, and trustworthy before shipping.
 - **Key Activities:**
-  1.  **Focus on User Experience (UX):** Add essential UX features. This includes loading states for charts and the AI analysis, clear success messages after uploads, and helpful error messages for API failures. A tool that doesn't communicate what it's doing feels broken.
-  2.  **Implement Caching:** The analysis API call will be slow and potentially expensive. Implement basic caching. If the underlying data hasn't changed since the last analysis, return the cached result instead of calling the LLM again.
-  3.  **End-to-End Testing:** Manually run through the entire user flow at least five times with different datasets. Start with a clean slate, upload data, verify the dashboard, generate recommendations, and look for bugs.
-  4.  **Deploy:** Push the final code to your Vercel project's main branch. Configure the production environment variables.
-- **Definition of Done:** The application is live at a public URL. It is stable, responsive, and can successfully complete the entire workflow from data upload to recommendation without crashing. You have a shareable link for your first users.
+  1.  **Agent-Centric UX:** Refine the streaming of the agent's steps. Make it clear and easy to follow. Handle edge cases, like when a tool returns an error or when the agent gets stuck in a loop.
+  2.  **Implement Smart Caching:** The agent might call the same tool with the same parameters multiple times. Implement caching at the tool level. If `get_revenue_summary` for August is called, cache the result for a few minutes to reduce database load and improve agent speed.
+  3.  **Error Handling & Observability:** What happens if a tool fails? The agent needs to be able to handle that gracefully. Log the entire agent run (all steps, tool calls, and results) so you can debug why it made a certain decision.
+  4.  **End-to-End Testing & Deployment:** Test the full flow with various prompts. Test simple prompts ("How many plans do we have?") and complex prompts ("Which plan is dragging down our Q2 profitability and what should we do about it?"). Deploy to Vercel.
+- **Definition of Done:** The application is deployed. The agent interaction is stable and provides clear feedback to the user throughout its run. Caching is working, and you have logs to trace and debug agent behavior.
