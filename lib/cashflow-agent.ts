@@ -1,4 +1,4 @@
-import { generateText, stepCountIs } from "ai";
+import { generateText, stepCountIs, streamText } from "ai";
 import { google, CASHFLOW_AGENT_SYSTEM_PROMPT } from "./config/agent-config";
 import {
   getRevenueSummaryTool,
@@ -34,7 +34,7 @@ export async function cashflowAgent(
     progressLogger.start(prompt);
     progressLogger.step("Initializing Financial Analyst Agent");
 
-    const result = await generateText({
+    const result = await streamText({
       model: google("gemini-2.5-flash-lite"),
       prompt,
       system: CASHFLOW_AGENT_SYSTEM_PROMPT,

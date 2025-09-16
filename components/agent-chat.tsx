@@ -1,10 +1,20 @@
-import { useState } from "react";
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useMetrics } from "@/lib/contexts/metrics-context";
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool";
+import { Response } from "@/components/ai-elements/response";
 import {
   Loader2,
   MessageSquare,
@@ -13,7 +23,10 @@ import {
   AlertTriangle,
   Minimize2,
   Maximize2,
+  StopCircle,
 } from "lucide-react";
+import { useState } from "react";
+import type { UIMessage, ToolUIPart } from "ai";
 
 interface AnalysisMetrics {
   totalRevenue?: number;
@@ -21,15 +34,6 @@ interface AnalysisMetrics {
   netCashflow?: number;
   plansAnalyzed?: number;
   anomaliesFound?: number;
-}
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  toolsUsed?: string[];
-  metrics?: AnalysisMetrics;
-  timestamp: Date;
 }
 
 interface AgentChatProps {
@@ -41,80 +45,91 @@ export function AgentChat({
   isCompact = false,
   onToggleCompact,
 }: AgentChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const { updateMetrics, refreshData, setLoading } = useMetrics();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  const { messages, sendMessage, status, stop, error } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/agent",
+    }),
+    onFinish: async ({ message }) => {
+      // Extract metrics from tool results in the message
+      const toolParts = message.parts.filter(
+        (part) =>
+          part.type.startsWith("tool-") && "output" in part && part.output
+      ) as ToolUIPart[];
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
-    };
+      const analysisMetrics: AnalysisMetrics = {};
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-    setLoading(true);
+      // Process tool results to extract metrics
+      toolParts.forEach((toolPart) => {
+        if (
+          toolPart.type.startsWith("tool-") &&
+          "output" in toolPart &&
+          toolPart.output
+        ) {
+          const toolName = toolPart.type.replace("tool-", "");
+          const result = toolPart.output;
 
-    try {
-      const response = await fetch("/api/agent", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt: input.trim() }),
+          if (toolName === "get_revenue_summary" && result) {
+            const revenueResult = result as { totalRevenue?: number };
+            if (revenueResult.totalRevenue) {
+              analysisMetrics.totalRevenue = revenueResult.totalRevenue;
+            }
+          }
+
+          if (toolName === "get_expense_summary" && result) {
+            const expenseResult = result as { totalExpenses?: number };
+            if (expenseResult.totalExpenses) {
+              analysisMetrics.totalExpenses = expenseResult.totalExpenses;
+            }
+          }
+
+          if (toolName === "calculate_cashflow_trend" && result) {
+            const cashflowResult = result as { totalNetCashflow?: number };
+            if (cashflowResult.totalNetCashflow !== undefined) {
+              analysisMetrics.netCashflow = cashflowResult.totalNetCashflow;
+            }
+          }
+
+          if (toolName === "list_pricing_plans" && result) {
+            const plansResult = result as { totalPlans?: number };
+            if (plansResult.totalPlans) {
+              analysisMetrics.plansAnalyzed = plansResult.totalPlans;
+            }
+          }
+
+          if (toolName === "find_data_anomalies" && result) {
+            const anomaliesResult = result as { anomaliesFound?: number };
+            if (anomaliesResult.anomaliesFound) {
+              analysisMetrics.anomaliesFound = anomaliesResult.anomaliesFound;
+            }
+          }
+        }
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to get analysis");
-      }
-
-      const data = await response.json();
-
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.response,
-        toolsUsed: data.toolsUsed,
-        metrics: data.analysisMetrics,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-
       // Update dashboard metrics if analysis returned metrics
-      if (data.analysisMetrics) {
-        updateMetrics({
-          totalRevenue: data.analysisMetrics.totalRevenue,
-          totalExpenses: data.analysisMetrics.totalExpenses,
-          netCashflow: data.analysisMetrics.netCashflow,
-          plansAnalyzed: data.analysisMetrics.plansAnalyzed,
-          anomaliesFound: data.analysisMetrics.anomaliesFound,
-        });
+      if (Object.keys(analysisMetrics).length > 0) {
+        updateMetrics(analysisMetrics);
       }
 
       // Refresh dashboard data to reflect any changes from AI analysis
       await refreshData();
-    } catch (error) {
-      console.error("Failed to analyze cashflow data:", error);
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content:
-          "Sorry, I encountered an error while analyzing your cashflow data. Please try again.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
       setLoading(false);
-    }
+    },
+    onError: (error) => {
+      console.error("Failed to analyze cashflow data:", error);
+      setLoading(false);
+    },
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || status === "streaming") return;
+
+    setLoading(true);
+    sendMessage({ text: input.trim() });
+    setInput("");
   };
 
   const formatCurrency = (amount: number) => {
@@ -131,6 +146,79 @@ export function AgentChat({
     "What are my biggest expense categories?",
     "How is my revenue distributed across pricing plans?",
   ];
+
+  // Extract metrics from tool results in a message
+  const getMetricsFromMessage = (message: UIMessage) => {
+    const toolParts = message.parts.filter(
+      (part) => part.type.startsWith("tool-") && "output" in part && part.output
+    ) as ToolUIPart[];
+    const metrics: AnalysisMetrics = {};
+
+    toolParts.forEach((toolPart) => {
+      if (
+        toolPart.type.startsWith("tool-") &&
+        "output" in toolPart &&
+        toolPart.output
+      ) {
+        const toolName = toolPart.type.replace("tool-", "");
+        const result = toolPart.output;
+
+        if (toolName === "get_revenue_summary" && result) {
+          const revenueResult = result as { totalRevenue?: number };
+          if (revenueResult.totalRevenue)
+            metrics.totalRevenue = revenueResult.totalRevenue;
+        }
+
+        if (toolName === "get_expense_summary" && result) {
+          const expenseResult = result as { totalExpenses?: number };
+          if (expenseResult.totalExpenses)
+            metrics.totalExpenses = expenseResult.totalExpenses;
+        }
+
+        if (toolName === "calculate_cashflow_trend" && result) {
+          const cashflowResult = result as { totalNetCashflow?: number };
+          if (cashflowResult.totalNetCashflow !== undefined)
+            metrics.netCashflow = cashflowResult.totalNetCashflow;
+        }
+
+        if (toolName === "find_data_anomalies" && result) {
+          const anomaliesResult = result as { anomaliesFound?: number };
+          if (anomaliesResult.anomaliesFound)
+            metrics.anomaliesFound = anomaliesResult.anomaliesFound;
+        }
+      }
+    });
+
+    return metrics;
+  };
+
+  // Render tool parts with proper UI components
+  const renderToolPart = (part: UIMessage["parts"][0], index: number) => {
+    // Handle tool parts with the proper type checking
+    if (part.type.startsWith("tool-")) {
+      const toolPart = part as ToolUIPart;
+
+      return (
+        <Tool key={`${toolPart.toolCallId}-${index}`} className="mb-2">
+          <ToolHeader type={toolPart.type} state={toolPart.state} />
+          <ToolContent>
+            {(toolPart.state === "input-streaming" ||
+              toolPart.state === "input-available") &&
+              "input" in toolPart &&
+              toolPart.input && <ToolInput input={toolPart.input} />}
+            {toolPart.state === "output-available" && "output" in toolPart && (
+              <ToolOutput output={toolPart.output} errorText={undefined} />
+            )}
+            {toolPart.state === "output-error" && "errorText" in toolPart && (
+              <ToolOutput output={undefined} errorText={toolPart.errorText} />
+            )}
+          </ToolContent>
+        </Tool>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <Card className={`flex flex-col ${isCompact ? "h-96" : "h-full"}`}>
@@ -207,114 +295,165 @@ export function AgentChat({
               }`}
             >
               <div
-                className={`max-w-[85%] rounded-lg p-3 ${
+                className={`max-w-[85%] ${
                   message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                    ? "bg-primary text-primary-foreground rounded-lg p-3"
+                    : "bg-transparent"
                 }`}
               >
-                <div className="whitespace-pre-wrap text-sm">
-                  {message.content}
+                {/* Render message content */}
+                <div
+                  className={message.role === "assistant" ? "space-y-3" : ""}
+                >
+                  {message.parts.map((part, index) => {
+                    // Render text parts
+                    if (part.type === "text") {
+                      return (
+                        <div
+                          key={index}
+                          className={
+                            message.role === "assistant"
+                              ? "bg-muted rounded-lg p-3"
+                              : ""
+                          }
+                        >
+                          {message.role === "assistant" ? (
+                            <Response className="text-sm">{part.text}</Response>
+                          ) : (
+                            <div className="whitespace-pre-wrap text-sm">
+                              {part.text}
+                            </div>
+                          )}
+                          {message.role === "assistant" && (
+                            <div className="mt-2 text-xs opacity-70">
+                              {new Date().toLocaleTimeString()}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // Render tool parts
+                    const toolComponent = renderToolPart(part, index);
+                    if (toolComponent !== null && toolComponent !== undefined) {
+                      return toolComponent as React.ReactNode;
+                    }
+
+                    return null;
+                  })}
                 </div>
 
-                {message.role === "assistant" &&
-                  (message.toolsUsed || message.metrics) && (
-                    <div className="mt-3 pt-3 border-t border-border/50">
-                      {/* Tools Used */}
-                      {message.toolsUsed && message.toolsUsed.length > 0 && (
-                        <div className="mb-3">
-                          <p className="text-xs font-medium mb-2">
-                            Tools Used:
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {message.toolsUsed.map((tool) => (
-                              <Badge
-                                key={tool}
-                                variant="secondary"
-                                className="text-xs"
-                              >
-                                {tool.replace(/_/g, " ")}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                {/* Show timestamp for user messages */}
+                {message.role === "user" && (
+                  <div className="mt-2 text-xs opacity-70">
+                    {new Date().toLocaleTimeString()}
+                  </div>
+                )}
 
-                      {/* Metrics */}
-                      {message.metrics &&
-                        Object.keys(message.metrics).length > 0 && (
-                          <div>
+                {/* Analysis summary for assistant messages */}
+                {message.role === "assistant" && (
+                  <div className="mt-3">
+                    {(() => {
+                      const metrics = getMetricsFromMessage(message);
+                      return (
+                        Object.keys(metrics).length > 0 && (
+                          <div className="bg-muted rounded-lg p-3">
                             <p className="text-xs font-medium mb-2">
-                              Updated Metrics:
+                              Analysis Summary:
                             </p>
                             <div className="grid grid-cols-1 gap-1 text-xs">
-                              {message.metrics.totalRevenue && (
+                              {metrics.totalRevenue && (
                                 <div className="flex items-center gap-1">
                                   <TrendingUp className="h-3 w-3 text-green-500" />
                                   <span>
                                     Revenue:{" "}
-                                    {formatCurrency(
-                                      message.metrics.totalRevenue
-                                    )}
+                                    {formatCurrency(metrics.totalRevenue)}
                                   </span>
                                 </div>
                               )}
-                              {message.metrics.totalExpenses && (
+                              {metrics.totalExpenses && (
                                 <div className="flex items-center gap-1">
                                   <DollarSign className="h-3 w-3 text-red-500" />
                                   <span>
                                     Expenses:{" "}
-                                    {formatCurrency(
-                                      message.metrics.totalExpenses
-                                    )}
+                                    {formatCurrency(metrics.totalExpenses)}
                                   </span>
                                 </div>
                               )}
-                              {message.metrics.netCashflow !== undefined && (
+                              {metrics.netCashflow !== undefined && (
                                 <div className="flex items-center gap-1">
                                   <TrendingUp
                                     className={`h-3 w-3 ${
-                                      message.metrics.netCashflow >= 0
+                                      metrics.netCashflow >= 0
                                         ? "text-green-500"
                                         : "text-red-500"
                                     }`}
                                   />
                                   <span>
-                                    Net:{" "}
-                                    {formatCurrency(
-                                      message.metrics.netCashflow
-                                    )}
+                                    Net: {formatCurrency(metrics.netCashflow)}
                                   </span>
                                 </div>
                               )}
-                              {message.metrics.anomaliesFound && (
+                              {metrics.anomaliesFound && (
                                 <div className="flex items-center gap-1">
                                   <AlertTriangle className="h-3 w-3 text-yellow-500" />
                                   <span>
-                                    Anomalies: {message.metrics.anomaliesFound}
+                                    Anomalies: {metrics.anomaliesFound}
                                   </span>
                                 </div>
                               )}
                             </div>
                           </div>
-                        )}
-                    </div>
-                  )}
-
-                <div className="mt-2 text-xs opacity-70">
-                  {message.timestamp.toLocaleTimeString()}
-                </div>
+                        )
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           ))}
 
-          {isLoading && (
+          {/* Loading State */}
+          {(status === "streaming" || status === "submitted") && (
             <div className="flex justify-start">
               <div className="bg-muted rounded-lg p-3">
                 <div className="flex items-center gap-2 text-sm">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Analyzing your cashflow data...</span>
+                  <span>
+                    {status === "submitted"
+                      ? "Submitting your query..."
+                      : "Analyzing your cashflow data..."}
+                  </span>
+                  {status === "streaming" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={stop}
+                      className="h-6 w-6 p-0 ml-2"
+                    >
+                      <StopCircle className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="flex justify-start">
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                <div className="text-sm text-destructive mb-2">
+                  Something went wrong. Please try again.
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.location.reload()}
+                  className="h-7 px-3 text-xs"
+                >
+                  Retry
+                </Button>
               </div>
             </div>
           )}
@@ -337,13 +476,18 @@ export function AgentChat({
                 handleSubmit(e);
               }
             }}
+            disabled={status === "streaming"}
           />
           <Button
             type="submit"
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || status === "streaming"}
             className="px-4"
           >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+            {status === "streaming" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Send"
+            )}
           </Button>
         </form>
 
