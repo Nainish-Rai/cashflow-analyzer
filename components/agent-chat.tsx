@@ -4,8 +4,6 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
 import { useMetrics } from "@/lib/contexts/metrics-context";
 import {
   Tool,
@@ -16,6 +14,22 @@ import {
 } from "@/components/ai-elements/tool";
 import { Response } from "@/components/ai-elements/response";
 import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputToolbar,
+  PromptInputTools,
+  type PromptInputMessage,
+} from "@/components/ai-elements/prompt-input";
+import { Actions, Action } from "@/components/ai-elements/actions";
+import {
   Loader2,
   MessageSquare,
   TrendingUp,
@@ -24,8 +38,9 @@ import {
   Minimize2,
   Maximize2,
   StopCircle,
+  Copy,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import type { UIMessage, ToolUIPart } from "ai";
 
 interface AnalysisMetrics {
@@ -123,12 +138,13 @@ export function AgentChat({
     },
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || status === "streaming") return;
+  const handleSubmit = (message: PromptInputMessage) => {
+    const hasText = Boolean(message.text);
+
+    if (!hasText || status === "streaming") return;
 
     setLoading(true);
-    sendMessage({ text: input.trim() });
+    sendMessage({ text: message.text! });
     setInput("");
   };
 
@@ -221,7 +237,7 @@ export function AgentChat({
   };
 
   return (
-    <Card className={`flex flex-col ${isCompact ? "h-96" : "h-full"}`}>
+    <Card className={`flex flex-col bg-black`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -250,246 +266,204 @@ export function AgentChat({
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col p-4 pt-0">
-        {/* Messages */}
-        <div
-          className={`flex-1 space-y-4 mb-4 overflow-y-auto ${
-            isCompact ? "max-h-48" : "max-h-96"
-          }`}
-        >
-          {messages.length === 0 && (
-            <div className="text-center text-muted-foreground py-4">
-              <MessageSquare className="h-8 w-8 mx-auto mb-3 opacity-50" />
-              <p className="text-sm font-medium mb-2">
-                Start analyzing your cashflow
-              </p>
-              <p className="text-xs">
-                Ask me to analyze your data, find trends, or optimize plans.
-              </p>
+        {/* AI Elements Conversation */}
+        <div className={`flex-1 ${isCompact ? "h-48" : "h-96"}`}>
+          <Conversation className="h-full">
+            <ConversationContent>
+              {messages.length === 0 && (
+                <div className="text-center text-muted-foreground py-8">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium mb-2">
+                    Start analyzing your cashflow
+                  </p>
+                  <p className="text-sm mb-6">
+                    Ask me to analyze your data, find trends, or optimize plans.
+                  </p>
 
-              {!isCompact && (
-                <div className="mt-4">
-                  <p className="text-xs font-medium mb-2">Try asking:</p>
-                  <div className="grid gap-1">
-                    {suggestedQuestions
-                      .slice(0, isCompact ? 2 : 5)
-                      .map((question, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setInput(question)}
-                          className="text-left text-xs p-2 rounded-md bg-muted hover:bg-muted/80 transition-colors"
-                        >
-                          &quot;{question}&quot;
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-[85%] ${
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-lg p-3"
-                    : "bg-transparent"
-                }`}
-              >
-                {/* Render message content */}
-                <div
-                  className={message.role === "assistant" ? "space-y-3" : ""}
-                >
-                  {message.parts.map((part, index) => {
-                    // Render text parts
-                    if (part.type === "text") {
-                      return (
-                        <div
-                          key={index}
-                          className={
-                            message.role === "assistant"
-                              ? "bg-muted rounded-lg p-3"
-                              : ""
-                          }
-                        >
-                          {message.role === "assistant" ? (
-                            <Response className="text-sm">{part.text}</Response>
-                          ) : (
-                            <div className="whitespace-pre-wrap text-sm">
-                              {part.text}
-                            </div>
-                          )}
-                          {message.role === "assistant" && (
-                            <div className="mt-2 text-xs opacity-70">
-                              {new Date().toLocaleTimeString()}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // Render tool parts
-                    const toolComponent = renderToolPart(part, index);
-                    if (toolComponent !== null && toolComponent !== undefined) {
-                      return toolComponent as React.ReactNode;
-                    }
-
-                    return null;
-                  })}
-                </div>
-
-                {/* Show timestamp for user messages */}
-                {message.role === "user" && (
-                  <div className="mt-2 text-xs opacity-70">
-                    {new Date().toLocaleTimeString()}
-                  </div>
-                )}
-
-                {/* Analysis summary for assistant messages */}
-                {message.role === "assistant" && (
-                  <div className="mt-3">
-                    {(() => {
-                      const metrics = getMetricsFromMessage(message);
-                      return (
-                        Object.keys(metrics).length > 0 && (
-                          <div className="bg-muted rounded-lg p-3">
-                            <p className="text-xs font-medium mb-2">
-                              Analysis Summary:
-                            </p>
-                            <div className="grid grid-cols-1 gap-1 text-xs">
-                              {metrics.totalRevenue && (
-                                <div className="flex items-center gap-1">
-                                  <TrendingUp className="h-3 w-3 text-green-500" />
-                                  <span>
-                                    Revenue:{" "}
-                                    {formatCurrency(metrics.totalRevenue)}
-                                  </span>
-                                </div>
-                              )}
-                              {metrics.totalExpenses && (
-                                <div className="flex items-center gap-1">
-                                  <DollarSign className="h-3 w-3 text-red-500" />
-                                  <span>
-                                    Expenses:{" "}
-                                    {formatCurrency(metrics.totalExpenses)}
-                                  </span>
-                                </div>
-                              )}
-                              {metrics.netCashflow !== undefined && (
-                                <div className="flex items-center gap-1">
-                                  <TrendingUp
-                                    className={`h-3 w-3 ${
-                                      metrics.netCashflow >= 0
-                                        ? "text-green-500"
-                                        : "text-red-500"
-                                    }`}
-                                  />
-                                  <span>
-                                    Net: {formatCurrency(metrics.netCashflow)}
-                                  </span>
-                                </div>
-                              )}
-                              {metrics.anomaliesFound && (
-                                <div className="flex items-center gap-1">
-                                  <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                                  <span>
-                                    Anomalies: {metrics.anomaliesFound}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* Loading State */}
-          {(status === "streaming" || status === "submitted") && (
-            <div className="flex justify-start">
-              <div className="bg-muted rounded-lg p-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>
-                    {status === "submitted"
-                      ? "Submitting your query..."
-                      : "Analyzing your cashflow data..."}
-                  </span>
-                  {status === "streaming" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={stop}
-                      className="h-6 w-6 p-0 ml-2"
-                    >
-                      <StopCircle className="h-4 w-4" />
-                    </Button>
+                  {!isCompact && (
+                    <div className="max-w-md mx-auto">
+                      <p className="text-sm font-medium mb-3">Try asking:</p>
+                      <div className="grid gap-2">
+                        {suggestedQuestions
+                          .slice(0, isCompact ? 2 : 5)
+                          .map((question, index) => (
+                            <button
+                              key={index}
+                              onClick={() => setInput(question)}
+                              className="text-left text-sm p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+                            >
+                              &quot;{question}&quot;
+                            </button>
+                          ))}
+                      </div>
+                    </div>
                   )}
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          {/* Error State */}
-          {error && (
-            <div className="flex justify-start">
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                <div className="text-sm text-destructive mb-2">
-                  Something went wrong. Please try again.
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.location.reload()}
-                  className="h-7 px-3 text-xs"
-                >
-                  Retry
-                </Button>
-              </div>
-            </div>
-          )}
+              {messages.map((message) => (
+                <Fragment key={message.id}>
+                  {message.parts.map((part, i) => {
+                    switch (part.type) {
+                      case "text":
+                        return (
+                          <Fragment key={`${message.id}-${i}`}>
+                            <Message from={message.role}>
+                              <MessageContent>
+                                <Response>{part.text}</Response>
+                              </MessageContent>
+                            </Message>
+                            {message.role === "assistant" && (
+                              <Actions className="mt-2">
+                                <Action
+                                  onClick={() =>
+                                    navigator.clipboard.writeText(part.text)
+                                  }
+                                  label="Copy"
+                                >
+                                  <Copy className="size-3" />
+                                </Action>
+                              </Actions>
+                            )}
+                          </Fragment>
+                        );
+                      default:
+                        // Render tool parts
+                        const toolComponent = renderToolPart(part, i);
+                        if (toolComponent) {
+                          return toolComponent;
+                        }
+                        return null;
+                    }
+                  })}
+
+                  {/* Analysis summary for assistant messages */}
+                  {message.role === "assistant" && (
+                    <div className="mt-3">
+                      {(() => {
+                        const metrics = getMetricsFromMessage(message);
+                        return (
+                          Object.keys(metrics).length > 0 && (
+                            <div className="bg-muted rounded-lg p-3">
+                              <p className="text-xs font-medium mb-2">
+                                Analysis Summary:
+                              </p>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                {metrics.totalRevenue && (
+                                  <div className="flex items-center gap-1">
+                                    <TrendingUp className="h-3 w-3 text-green-500" />
+                                    <span>
+                                      Revenue:{" "}
+                                      {formatCurrency(metrics.totalRevenue)}
+                                    </span>
+                                  </div>
+                                )}
+                                {metrics.totalExpenses && (
+                                  <div className="flex items-center gap-1">
+                                    <DollarSign className="h-3 w-3 text-red-500" />
+                                    <span>
+                                      Expenses:{" "}
+                                      {formatCurrency(metrics.totalExpenses)}
+                                    </span>
+                                  </div>
+                                )}
+                                {metrics.netCashflow !== undefined && (
+                                  <div className="flex items-center gap-1">
+                                    <TrendingUp
+                                      className={`h-3 w-3 ${
+                                        metrics.netCashflow >= 0
+                                          ? "text-green-500"
+                                          : "text-red-500"
+                                      }`}
+                                    />
+                                    <span>
+                                      Net: {formatCurrency(metrics.netCashflow)}
+                                    </span>
+                                  </div>
+                                )}
+                                {metrics.anomaliesFound && (
+                                  <div className="flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                    <span>
+                                      Anomalies: {metrics.anomaliesFound}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        );
+                      })()}
+                    </div>
+                  )}
+                </Fragment>
+              ))}
+
+              {/* Loading State */}
+              {(status === "streaming" || status === "submitted") && (
+                <Message from="assistant">
+                  <MessageContent>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>
+                        {status === "submitted"
+                          ? "Submitting your query..."
+                          : "Analyzing your cashflow data..."}
+                      </span>
+                      {status === "streaming" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={stop}
+                          className="h-6 w-6 p-0 ml-2"
+                        >
+                          <StopCircle className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </MessageContent>
+                </Message>
+              )}
+
+              {/* Error State */}
+              {error && (
+                <Message from="assistant">
+                  <MessageContent>
+                    <div className="text-sm text-destructive mb-2">
+                      Something went wrong. Please try again.
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.location.reload()}
+                      className="h-7 px-3 text-xs"
+                    >
+                      Retry
+                    </Button>
+                  </MessageContent>
+                </Message>
+              )}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
         </div>
 
-        <Separator className="mb-3" />
-
-        {/* Input Form */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about your cashflow analysis..."
-            className={`flex-1 resize-none ${
-              isCompact ? "min-h-[40px]" : "min-h-[60px]"
-            }`}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
-              }
-            }}
-            disabled={status === "streaming"}
-          />
-          <Button
-            type="submit"
-            disabled={!input.trim() || status === "streaming"}
-            className="px-4"
-          >
-            {status === "streaming" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              "Send"
-            )}
-          </Button>
-        </form>
+        {/* AI Elements Prompt Input */}
+        <PromptInput onSubmit={handleSubmit} className="mt-4">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={(e) => setInput(e.target.value)}
+              value={input}
+              placeholder="Ask about your cashflow analysis..."
+            />
+          </PromptInputBody>
+          <PromptInputToolbar>
+            <PromptInputTools>
+              {/* Future: Add attachment support here if needed */}
+            </PromptInputTools>
+            <PromptInputSubmit disabled={!input.trim()} status={status} />
+          </PromptInputToolbar>
+        </PromptInput>
 
         <p className="text-xs text-muted-foreground mt-2">
           Press Enter to send, Shift+Enter for new line

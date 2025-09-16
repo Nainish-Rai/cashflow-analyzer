@@ -16,7 +16,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { MetricsProvider, useMetrics } from "@/lib/contexts/metrics-context";
-import { MessageSquare, Bot, RefreshCw } from "lucide-react";
+import { Bot, RefreshCw } from "lucide-react";
 
 function DashboardContent() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
@@ -30,7 +30,6 @@ function DashboardContent() {
     <SidebarProvider
       style={
         {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
           "--header-height": "calc(var(--spacing) * 12)",
         } as React.CSSProperties
       }
@@ -51,14 +50,14 @@ function DashboardContent() {
                           Analyze Cashflow with AI
                         </Button>
                       </SheetTrigger>
-                      <SheetContent side="right" className="w-full sm:max-w-lg">
+                      <SheetContent
+                        side="right"
+                        className="w-[80%] min-w-[800px] max-w-none"
+                      >
                         <SheetHeader>
-                          <SheetTitle className="flex items-center gap-2">
-                            <MessageSquare className="h-5 w-5" />
-                            Cashflow AI Agent
-                          </SheetTitle>
+                          <SheetTitle>AI Cashflow Analysis</SheetTitle>
                         </SheetHeader>
-                        <div className="mt-6 h-[calc(100vh-8rem)]">
+                        <div className="mt-6 flex-1 overflow-y-auto hide-scrollbar">
                           <AgentChat />
                         </div>
                       </SheetContent>
