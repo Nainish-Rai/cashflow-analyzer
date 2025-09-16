@@ -42,6 +42,12 @@ import {
 } from "lucide-react";
 import { useState, Fragment } from "react";
 import type { UIMessage, ToolUIPart } from "ai";
+import { RevenueSummary } from "@/components/generative-ui/revenue-summary";
+import { ExpenseSummary } from "@/components/generative-ui/expense-summary";
+import { CashflowTrend } from "@/components/generative-ui/cashflow-trend";
+import { PricingPlans } from "@/components/generative-ui/pricing-plans";
+import { ProfitabilityAnalysis } from "@/components/generative-ui/profitability-analysis";
+import { AnomalyDetection } from "@/components/generative-ui/anomaly-detection";
 
 interface AnalysisMetrics {
   totalRevenue?: number;
@@ -223,7 +229,11 @@ export function AgentChat({
               "input" in toolPart &&
               toolPart.input && <ToolInput input={toolPart.input} />}
             {toolPart.state === "output-available" && "output" in toolPart && (
-              <ToolOutput output={toolPart.output} errorText={undefined} />
+              <>
+                <ToolOutput output={toolPart.output} errorText={undefined} />
+                {/* Render generative UI components for specific tools */}
+                {renderGenerativeUI(toolPart)}
+              </>
             )}
             {toolPart.state === "output-error" && "errorText" in toolPart && (
               <ToolOutput output={undefined} errorText={toolPart.errorText} />
@@ -231,6 +241,152 @@ export function AgentChat({
           </ToolContent>
         </Tool>
       );
+    }
+
+    return null;
+  };
+
+  // Render generative UI components based on tool type and output
+  const renderGenerativeUI = (toolPart: ToolUIPart) => {
+    if (
+      toolPart.state !== "output-available" ||
+      !("output" in toolPart) ||
+      !toolPart.output
+    ) {
+      return null;
+    }
+
+    const toolName = toolPart.type.replace("tool-", "");
+    const output = toolPart.output as any;
+
+    try {
+      switch (toolName) {
+        case "get_revenue_summary":
+          if (output.totalRevenue !== undefined) {
+            return (
+              <div className="mt-4">
+                <RevenueSummary
+                  totalRevenue={output.totalRevenue}
+                  totalTransactions={output.totalTransactions || 0}
+                  averageTransactionAmount={
+                    output.averageTransactionAmount || 0
+                  }
+                  period={output.period || "unknown"}
+                  dateRange={output.dateRange || { startDate: "", endDate: "" }}
+                  groupedData={output.groupedData || []}
+                />
+              </div>
+            );
+          }
+          break;
+
+        case "get_expense_summary":
+          if (output.totalExpenses !== undefined) {
+            return (
+              <div className="mt-4">
+                <ExpenseSummary
+                  totalExpenses={output.totalExpenses}
+                  totalTransactions={output.totalTransactions || 0}
+                  averageTransactionAmount={
+                    output.averageTransactionAmount || 0
+                  }
+                  period={output.period || "unknown"}
+                  dateRange={output.dateRange || { startDate: "", endDate: "" }}
+                  recurringExpenses={
+                    output.recurringExpenses || { total: 0, count: 0 }
+                  }
+                  groupedData={output.groupedData || []}
+                />
+              </div>
+            );
+          }
+          break;
+
+        case "calculate_cashflow_trend":
+          if (output.totalRevenue !== undefined) {
+            return (
+              <div className="mt-4">
+                <CashflowTrend
+                  totalRevenue={output.totalRevenue}
+                  totalExpenses={output.totalExpenses || 0}
+                  totalNetCashflow={output.totalNetCashflow || 0}
+                  period={output.period || "unknown"}
+                  dateRange={output.dateRange || { startDate: "", endDate: "" }}
+                  monthlyTrends={output.monthlyTrends || []}
+                  averageMonthlyRevenue={output.averageMonthlyRevenue || 0}
+                  averageMonthlyExpenses={output.averageMonthlyExpenses || 0}
+                />
+              </div>
+            );
+          }
+          break;
+
+        case "list_pricing_plans":
+          if (output.totalPlans !== undefined) {
+            return (
+              <div className="mt-4">
+                <PricingPlans
+                  totalPlans={output.totalPlans}
+                  period={output.period || "unknown"}
+                  dateRange={output.dateRange || { startDate: "", endDate: "" }}
+                  plans={output.plans || []}
+                />
+              </div>
+            );
+          }
+          break;
+
+        case "calculate_profitability_for_plan":
+          if (output.planId !== undefined && output.revenue !== undefined) {
+            return (
+              <div className="mt-4">
+                <ProfitabilityAnalysis
+                  planId={output.planId}
+                  period={output.period || "unknown"}
+                  dateRange={output.dateRange || { startDate: "", endDate: "" }}
+                  revenue={output.revenue}
+                  allocatedExpenses={output.allocatedExpenses || 0}
+                  profit={output.profit || 0}
+                  profitMargin={output.profitMargin || 0}
+                  revenueShare={output.revenueShare || 0}
+                  transactionCount={output.transactionCount || 0}
+                  averageTransactionAmount={
+                    output.averageTransactionAmount || 0
+                  }
+                />
+              </div>
+            );
+          }
+          break;
+
+        case "find_data_anomalies":
+          if (output.anomaliesFound !== undefined) {
+            return (
+              <div className="mt-4">
+                <AnomalyDetection
+                  anomaliesFound={output.anomaliesFound}
+                  period={output.period || "unknown"}
+                  dateRange={output.dateRange || { startDate: "", endDate: "" }}
+                  sensitivity={output.sensitivity || "medium"}
+                  statistics={
+                    output.statistics || {
+                      revenue: { mean: 0, stdDev: 0 },
+                      expenses: { mean: 0, stdDev: 0 },
+                    }
+                  }
+                  anomalies={output.anomalies || []}
+                />
+              </div>
+            );
+          }
+          break;
+
+        default:
+          return null;
+      }
+    } catch (error) {
+      console.error(`Error rendering generative UI for ${toolName}:`, error);
+      return null;
     }
 
     return null;
